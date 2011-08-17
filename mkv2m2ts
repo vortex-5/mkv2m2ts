@@ -1,0 +1,318 @@
+#!/bin/bash
+
+#########################################
+# Vortex-5's Remuxing Script based on:  #
+# EqUaTe's MKV to M2TS remuxing script  #
+#                                       #
+# Version: 0.5.9                        #
+#                                       #
+# This script takes an H.264 encoded    #
+# video, in an MKV container, demuxes   #
+# it, reencodes the audio if necessary, #
+# and muxes to an M2TS container.       #
+#                                       #
+#                                       #
+# Supported audio formats:              #
+#                         AC3           #
+#                         DTS           #
+#                                       #
+#########################################
+
+
+echo
+TSMUXER=$(which tsMuxeR)
+AUDIOLANG=eng
+MKV="$1"
+
+REQMISS=0
+OPTMISS=0
+
+if [ -z $TSMUXER ]
+then
+	REQMISS=$(($REQMISS+1))
+	MISSING="tsmuxer"
+fi
+
+if [ -z $(which mediainfo) ]
+then
+	REQMISS=$(($REQMISS+1))
+	MISSING="$MISSING mediainfo"
+fi
+
+if [ -z $(which mkvinfo) ]
+then
+	REQMISS=$(($REQMISS+1))
+	MISSING="$MISSING mkvtoolnix"
+fi
+
+if [ -z $(which aften) ]
+then
+	REQMISS=$(($REQMISS+1))
+	MISSING="$MISSING aften"
+fi
+
+if [ -z $(which dcadec) ]
+then
+	OPTMISS=$(($OPTMISS+1))
+	DTS=1
+	MISSING="$MISSING dcadec"
+else
+	DTS=0
+fi
+
+if [ -z $(which faad) ]
+then
+	OPTMISS=$(($OPTMISS+1))
+	AAC=1
+	MISSING="$MISSING faad"
+else
+	AAC=0
+fi
+
+if [ -z $(which oggdec) ]
+then
+	OPTMISS=$(($OPTMISS+1))
+	VORBIS=1
+	MISSING="$MISSING oggdec"
+else
+	VORBIS=0
+fi
+
+
+if [[ "$REQMISS" -gt "0"  || "$OPTMISS" -gt "0" ]]
+then
+	echo "Software used by this script is missing."
+	for i in $(echo $MISSING)
+	do
+		case $i in
+			tsmuxer)
+				echo "tsMuxeR is missing. This is required. Please download from: http://www.smlabs.net/tsmuxer_en.html"
+				;;
+			mediainfo)
+				echo "mediainfo is missing. This is required. Please download the CLI version from: http://mediainfo.sourceforge.net/en"
+				;;
+			mkvtoolnix)
+				echo "mkvtoolnix (mkvmerge, mkvinfo, mkvextract) is missing. This is required. Please install the mkvtoolnix package for your distro."
+				;;
+			aften)
+				echo "aften is missing. This is required for encoding AC3 audio."
+				echo "Please install the aften package for your distro, or install manually from http://aften.sourceforge.net"
+				;;
+			dcadec)
+				echo "dcadec is missing. This is optional. You will not be able to convert DTS audio without it."
+				echo "Please install the libdca0 package for you distro, or install manually from http://www.videolan.org/developers/libdca.html"
+				echo "Note that not installing this package will reduce the functionality of this script. It is highly recommended that you install it."
+				;;
+			faad)
+				echo "faad is missing. This is optional. You will not be able to convert AAC audio without it."
+				echo "Please install the faad package for your distro."
+				echo "Note that not installing this package will reduce the functionality of this script. It is highly recommended that you install it."
+				;;
+			oggdec)
+				echo "oggdec is missing. This is optional. You will not be able to convert Ogg Vorbis audio without it."
+				echo "Please install the vorbis-tools package for your distro."
+				echo -e "Note that not installing this package will reduce the functionality of this script. It is highly recommended that you install it."
+				;;
+			*)
+				;;
+		esac
+		if [ "$REQMISS" -gt "0" ]
+		then
+			echo
+			echo "Required software is missing. Aborting."
+			exit 1
+		fi
+		if [ "$OPTMISS" -gt "0" ]
+		then
+			echo
+			echo "Some optional software is missing. Functionality has been reduced."
+			echo
+		fi
+	done
+fi
+
+CONTAINER=$(mkvmerge -i "$MKV" | head -n 1 | cut -d':' -f3 | cut -c 2-)
+if [ -z "$MKV" ]
+then
+	echo "No MKV file was provided."
+	echo
+	echo "Usage: mkv2m2ts.sh filename.mkv"
+	echo
+	exit 1
+else
+	CONTAINER=$(mkvmerge -i "$MKV" | head -n 1 | cut -d':' -f3 | cut -c 2-)
+fi
+
+if [ "$CONTAINER" != "Matroska" ]
+then
+	echo "Invalid MKV provided."
+	echo "The supplied file has a container type of:"
+	echo -e "\t\t$CONTAINER"
+	echo
+	echo "Please supply a valid MKV."
+	echo
+	exit 1
+else
+	echo "Valid MKV supplied. Continuing."
+fi
+
+#Audio format check
+echo "Checking audio format(s)"
+NAME=$(basename "${1%.*}")
+if [ $(echo "$NAME" | wc -w) -gt 1 ]
+then
+	ORIGNAME=$NAME
+	NAME=$(echo $NAME | sed 's/ /_/g')
+fi
+
+FPS=$(mkvinfo "$MKV" | grep fps | grep -v 32.000ms | cut -d"(" -f2 | cut -d" " -f1)
+
+NUMAUDIOTRACKS=$(mediainfo "$MKV" | tr -d '\r' | tr '\n' ';' | sed 's/;;/\n/g' | grep Audio | egrep -i "dca|dts|ac3|aac|vorbis" | wc -l)
+
+NUMENGTRACKS=$(mediainfo "$MKV" | tr -d '\r' | tr '\n' ';' | sed 's/;;/\n/g' | grep Audio | egrep -i 'dca|dts|ac3|aac|vorbis' | grep English | wc -l)
+
+AVCLEVEL=$(mediainfo "$MKV" | tr -d '\r' | tr '\n' ';' | sed 's/;;/\n/g' | grep Video | sed 's/;/\n/g' | grep "Format profile" | cut -d':' -f2 | cut -d'@' -f2 | tr -d 'L')
+AVCLEVEL1=$(echo $AVCLEVEL | cut -d'.' -f1)
+AVCLEVEL2=$(echo $AVCLEVEL | cut -d'.' -f2)
+
+VIDEOTRACK=$(mkvmerge -i "$MKV" | grep video | cut -d':' -f1 | cut -d' ' -f3)
+
+if [ "$NUMAUDIOTRACKS" -eq "1" ]
+then
+	SINGLEAUDIO=yes
+	echo "Single valid audio stream detected."
+
+	AUDIOFORMAT=$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | sed 's/||/\n/g' | grep "Codec ID" | cut -d'_' -f2)
+	AUDIOTRACK=$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep $AUDIOFORMAT | sed 's/||/\n/g' | grep "Track number" | cut -d':' -f2 | tr -d ' ')
+
+elif [ "$NUMENGTRACKS" -eq "1" ]
+then
+	SINGLEAUDIO=yes
+	echo "Single valid audio stream detected."
+
+	AUDIOFORMAT=$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | grep eng | sed 's/||/\n/g' | grep "Codec ID" | cut -d'_' -f2)
+	AUDIOTRACK=$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep $AUDIOFORMAT | grep eng | sed 's/||/\n/g' | grep "Track number" | cut -d':' -f2 | tr -d ' ')
+
+else
+	SINGLEAUDIO=no
+	echo "Multiple audio streams detected."
+	TRACKNUM=1
+	if [ "$NUMENGTRACKS" -gt "1" ]
+	then
+		while [ "$TRACKNUM" -le "$NUMENGTRACKS" ]
+		do
+			AUDIOFORMAT=$AUDIOFORMAT:$(mkvinfo "$MKV" | tr '\n'  '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | grep $AUDIOLANG | head -n$TRACKNUM | tail -n1 | sed 's/||/\n/g' | grep "Codec ID" | cut -d'_' -f2)
+			AUDIOTRACK=$AUDIOTRACK:$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | grep $AUDIOLANG | head -n$TRACKNUM | tail -n1 | sed 's/||/\n/g' | grep "Track number" | cut -f2 -d':' | tr -d ' ')
+			TRACKNUM=$(($TRACKNUM+1))
+		done
+	else
+		while [ $TRACKNUM -le $NUMAUDIOTRACKS ]
+		do
+			AUDIOFORMAT=$AUDIOFORMAT:$(mkvinfo "$MKV" | tr '\n'  '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | head -n$TRACKNUM | tail -n1 | sed 's/||/\n/g' | grep "Codec ID" | cut -d'_' -f2)
+			TRACKNUM=$(($TRACKNUM+1))
+		done
+	fi
+	AUDIOFORMAT=$(echo $AUDIOFORMAT | sed -e 's/:/ /g' | cut -d' ' -f2- )
+	AUDIOTRACK=$(echo $AUDIOTRACK | sed -e 's/:/ /g' | cut -d' ' -f2- )
+fi
+
+echo
+TRACKNUM=1
+for i in $AUDIOFORMAT
+do
+	case $i in
+		AC3|ac3)
+			echo AC3 audio detected. Good.
+			mkvextract tracks "$MKV" $(echo -n $AUDIOTRACK | cut -d' ' -f$TRACKNUM):"$NAME$TRACKNUM.ac3"
+			AUDIO="$AUDIO $NAME$TRACKNUM.ac3,:lang=$AUDIOLANG"
+			;;
+		DTS|dts|DCA|dca)
+			if [ "$DTS" -eq "1" ]
+			then
+				echo "DTS processing has been disabled. This track will be skipped. Please install dcadec (libdca0)"
+				echo
+			else
+				echo DTS audio detected. Need to transcode to AC3.
+				echo Beginning transcode.
+				mkvextract tracks "$MKV" $(echo -n $AUDIOTRACK | cut -d' ' -f$TRACKNUM):"$NAME$TRACKNUM.dts"
+				dcadec -o wavall "$NAME$TRACKNUM.dts" | aften -b 640 - "$NAME$TRACKNUM.ac3" 2>/dev/null
+				AUDIO="$AUDIO $NAME$TRACKNUM.ac3,:lang=$AUDIOLANG"
+				rm "$NAME$TRACKNUM.dts"
+			fi
+			;;
+		AAC|aac)
+			if [ "$AAC" -eq "1" ]
+			then
+				echo "AAC processing has been disabled. This track will be skipped. Please install faad."
+				echo
+			else
+				echo AAC audio detected. Need to transcode to AC3.
+				echo Beginning transcode.
+				mkvextract tracks "$MKV" $(echo -n $AUDIOTRACK | cut -d' ' -f$TRACKNUM):"$NAME$TRACKNUM.aac"
+				faad -o - "$NAME$TRACKNUM.aac" | aften -b 640 - "$NAME$TRACKNUM.ac3" 2>/dev/null
+				AUDIO="$AUDIO $NAME$TRACKNUM.ac3,:lang=$AUDIOLANG"
+				rm "$NAME$TRACKNUM.aac"
+			fi
+			;;
+		VORBIS|vorbis)
+			if [ "$VORBIS" -eq "1" ]
+			then
+				echo "VORBIS audio processing has been disabled. This track will be skipped. Please install oggdec (vorbis-tools)"
+				echo
+			else
+				echo "VORBIS audio detected. Need to transcode to AC3."
+				echo "Beginning transcode."
+				mkvextract tracks "$MKV" $(echo -n $AUDIOTRACK | cut -d' ' -f$TRACKNUM):"$NAME$TRACKNUM.oga"
+				oggdec -o - "$NAME$TRACKNUM.oga" | aften -b 256 - "$NAME$TRACKNUM.ac3" 2>/dev/null
+				AUDIO="$AUDIO $NAME$TRACKNUM.ac3,:lang=$AUDIOLANG"
+				rm "$NAME$TRACKNUM.oga"
+			fi
+			;;
+		*)
+			echo Unsupported audio format.
+			;;
+	esac
+	TRACKNUM=$(($TRACKNUM+1))
+done
+
+echo Extracting Video track.
+mkvextract tracks "$MKV" $VIDEOTRACK:"$NAME".h264
+
+echo MUXOPT --no-pcr-on-video-pid --new-audio-pes --vbr  --vbv-len=500 > "$NAME".meta
+if [ "$AVCLEVEL1" -gt "4" ]
+then
+	echo V_MPEG4/ISO/AVC, "$NAME.h264", level=4.1, insertSEI, contSPS, lang=eng >> "$NAME".meta
+elif [[ "$AVCLEVEL1" -eq "4" && "$AVCLEVEL2" -gt 1 ]]
+then
+	echo V_MPEG4/ISO/AVC, "$NAME.h264", level=4.1, insertSEI, contSPS, lang=eng >> "$NAME".meta
+else
+	echo V_MPEG4/ISO/AVC, "$NAME.h264", insertSEI, contSPS, lang=eng >> "$NAME".meta
+fi
+
+for i in `echo $AUDIO`
+do
+	echo A_AC3, "`echo $i | sed -e 's/:/ /g'`" >> "$NAME".meta
+done
+
+echo
+echo "Audio transcode complete. Calling tsmuxer."
+if [ -n "$ORIGNAME" ]
+then
+	$TSMUXER "$NAME.meta" "$ORIGNAME.m2ts"
+else
+	$TSMUXER "$NAME.meta" "$NAME.m2ts"
+fi
+
+if [ "$?" -eq "0" ]
+then
+	rm "$NAME".h264
+	rm "$NAME".meta
+	TMP=1
+	while [ $TMP -lt $TRACKNUM ]
+	do
+		rm "$NAME$TMP.ac3"
+		TMP=$(($TMP+1))
+	done
+fi
+
+

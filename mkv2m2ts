@@ -4,7 +4,7 @@
 # Vortex-5's Remuxing Script based on:  #
 # EqUaTe's MKV to M2TS remuxing script  #
 #                                       #
-# Version: 0.5.9                        #
+# Version: 0.5.10                       #
 #                                       #
 # This script takes an H.264 encoded    #
 # video, in an MKV container, demuxes   #
@@ -234,9 +234,13 @@ do
 			else
 				echo DTS audio detected. Need to transcode to AC3.
 				echo Beginning transcode.
+				echo ----- EXTRACTING -----
 				mkvextract tracks "$MKV" $(echo -n $AUDIOTRACK | cut -d' ' -f$TRACKNUM):"$NAME$TRACKNUM.dts"
-				dcadec -o wavall "$NAME$TRACKNUM.dts" | aften -b 640 - "$NAME$TRACKNUM.ac3" 2>/dev/null
+				echo ----- TRANSCODING -----
+				#dcadec -o wavall "$NAME$TRACKNUM.dts" | aften -b 640 - "$NAME$TRACKNUM.ac3" 2>/dev/null
+				dcadec -o wavall "$NAME$TRACKNUM.dts" | aften -b 640 -v 0 - "$NAME$TRACKNUM.ac3"
 				AUDIO="$AUDIO $NAME$TRACKNUM.ac3,:lang=$AUDIOLANG"
+				echo ----- CLEANING UP -----
 				rm "$NAME$TRACKNUM.dts"
 			fi
 			;;
@@ -248,9 +252,13 @@ do
 			else
 				echo AAC audio detected. Need to transcode to AC3.
 				echo Beginning transcode.
+				echo ----- EXTRACTING -----
 				mkvextract tracks "$MKV" $(echo -n $AUDIOTRACK | cut -d' ' -f$TRACKNUM):"$NAME$TRACKNUM.aac"
-				faad -o - "$NAME$TRACKNUM.aac" | aften -b 640 - "$NAME$TRACKNUM.ac3" 2>/dev/null
+				#faad -o - "$NAME$TRACKNUM.aac" | aften -b 640 - "$NAME$TRACKNUM.ac3" 2>/dev/null	
+				echo ----- TRANSCODING -----
+				faad -o - "$NAME$TRACKNUM.aac" | aften -b 640 -v 0 - "$NAME$TRACKNUM.ac3"
 				AUDIO="$AUDIO $NAME$TRACKNUM.ac3,:lang=$AUDIOLANG"
+				echo ----- CLEANING UP -----
 				rm "$NAME$TRACKNUM.aac"
 			fi
 			;;
@@ -262,9 +270,12 @@ do
 			else
 				echo "VORBIS audio detected. Need to transcode to AC3."
 				echo "Beginning transcode."
+				echo ----- EXTRACTING -----
 				mkvextract tracks "$MKV" $(echo -n $AUDIOTRACK | cut -d' ' -f$TRACKNUM):"$NAME$TRACKNUM.oga"
-				oggdec -o - "$NAME$TRACKNUM.oga" | aften -b 256 - "$NAME$TRACKNUM.ac3" 2>/dev/null
+				echo ----- TRANSCODING -----
+				oggdec -o - "$NAME$TRACKNUM.oga" | aften -b 256 -v 0 - "$NAME$TRACKNUM.ac3"
 				AUDIO="$AUDIO $NAME$TRACKNUM.ac3,:lang=$AUDIOLANG"
+				echo ----- CLEANING UP -----
 				rm "$NAME$TRACKNUM.oga"
 			fi
 			;;
@@ -314,5 +325,6 @@ then
 		TMP=$(($TMP+1))
 	done
 fi
+
 
 

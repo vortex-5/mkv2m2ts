@@ -100,7 +100,7 @@ then
 				;;
 			dcadec)
 				echo "dcadec is missing. This is optional. You will not be able to convert DTS audio without it."
-				echo "Please install the libdca0 package for you distro, or install manually from http://www.videolan.org/developers/libdca.html"
+				echo "Please install the libdca0 (or possibly libdca-utils) package for your distro, or install manually from http://www.videolan.org/developers/libdca.html."
 				echo "Note that not installing this package will reduce the functionality of this script. It is highly recommended that you install it."
 				;;
 			faad)

@@ -165,8 +165,6 @@ then
 	NAME=$(echo $NAME | sed 's/ /_/g')
 fi
 
-FPS=$(mkvinfo "$MKV" | grep fps | grep -v 32.000ms | cut -d"(" -f2 | cut -d" " -f1)
-
 NUMAUDIOTRACKS=$(mediainfo "$MKV" | tr -d '\r' | tr '\n' ';' | sed 's/;;/\n/g' | grep Audio | egrep -i "dca|dts|ac3|aac|vorbis" | wc -l)
 
 NUMENGTRACKS=$(mediainfo "$MKV" | tr -d '\r' | tr '\n' ';' | sed 's/;;/\n/g' | grep Audio | egrep -i 'dca|dts|ac3|aac|vorbis' | grep English | wc -l)
@@ -176,6 +174,7 @@ AVCLEVEL1=$(echo $AVCLEVEL | cut -d'.' -f1)
 AVCLEVEL2=$(echo $AVCLEVEL | cut -d'.' -f2)
 
 VIDEOTRACK=$(mkvmerge -i "$MKV" | grep video | cut -d':' -f1 | cut -d' ' -f3)
+FPS=$(mediainfo "$MKV" |grep "Frame rate" | cut -d':' -f2 | cut -d' ' -f2)
 
 if [ "$NUMAUDIOTRACKS" -eq "1" ]
 then
@@ -183,7 +182,7 @@ then
 	echo "Single valid audio stream detected."
 
 	AUDIOFORMAT=$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | sed 's/||/\n/g' | grep "Codec ID" | cut -d'_' -f2)
-	AUDIOTRACK=$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep $AUDIOFORMAT | sed 's/||/\n/g' | grep "Track number" | cut -d':' -f2 | tr -d ' ')
+	AUDIOTRACK=$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep $AUDIOFORMAT | sed 's/||/\n/g' | grep "Track number" | cut -d':' -f3 | tr -d ' ' | cut -d ')' -f1)
 
 elif [ "$NUMENGTRACKS" -eq "1" ]
 then
@@ -292,12 +291,12 @@ mkvextract tracks "$MKV" $VIDEOTRACK:"$NAME".h264
 echo MUXOPT --no-pcr-on-video-pid --new-audio-pes --vbr  --vbv-len=500 > "$NAME".meta
 if [ "$AVCLEVEL1" -gt "4" ]
 then
-	echo V_MPEG4/ISO/AVC, "$NAME.h264", level=4.1, insertSEI, contSPS, lang=eng >> "$NAME".meta
+	echo V_MPEG4/ISO/AVC, "$NAME.h264", level=4.1, insertSEI, contSPS, lang=eng, fps=$FPS >> "$NAME".meta
 elif [[ "$AVCLEVEL1" -eq "4" && "$AVCLEVEL2" -gt 1 ]]
 then
-	echo V_MPEG4/ISO/AVC, "$NAME.h264", level=4.1, insertSEI, contSPS, lang=eng >> "$NAME".meta
+	echo V_MPEG4/ISO/AVC, "$NAME.h264", level=4.1, insertSEI, contSPS, lang=eng, fps=$FPS >> "$NAME".meta
 else
-	echo V_MPEG4/ISO/AVC, "$NAME.h264", insertSEI, contSPS, lang=eng >> "$NAME".meta
+	echo V_MPEG4/ISO/AVC, "$NAME.h264", insertSEI, contSPS, lang=eng, fps=$FPS >> "$NAME".meta
 fi
 
 for i in `echo $AUDIO`

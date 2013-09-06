@@ -183,7 +183,7 @@ then
 	echo "Single valid audio stream detected."
 
 	AUDIOFORMAT=$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | sed 's/||/\n/g' | grep "Codec ID" | cut -d'_' -f2)
-	AUDIOTRACK=$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep $AUDIOFORMAT | sed 's/||/\n/g' | grep "Track number" | cut -d':' -f2 | tr -d ' ')
+	AUDIOTRACK=$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep $AUDIOFORMAT | sed 's/||/\n/g' | grep "Track number" | cut -d':' -f3 | tr -d ' ' | cut -d ')' -f1)
 
 elif [ "$NUMENGTRACKS" -eq "1" ]
 then

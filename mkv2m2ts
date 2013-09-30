@@ -200,8 +200,8 @@ else
 	then
 		while [ "$TRACKNUM" -le "$NUMENGTRACKS" ]
 		do
-			AUDIOFORMAT=$AUDIOFORMAT:$(mkvinfo "$MKV" | tr '\n'  '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | grep $AUDIOLANG | head -n$TRACKNUM | tail -n1 | sed 's/||/\n/g' | grep "Codec ID" | cut -d'_' -f2)
-			AUDIOTRACK=$AUDIOTRACK:$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | grep $AUDIOLANG | head -n$TRACKNUM | tail -n1 | sed 's/||/\n/g' | grep "Track number" | cut -f2 -d':' | tr -d ' ')
+			AUDIOFORMAT=$AUDIOFORMAT:$(mkvinfo "$MKV" | tr '\n'  '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | head -n$TRACKNUM | tail -n1 | sed 's/||/\n/g' | grep "Codec ID" | cut -d'_' -f2)
+			AUDIOTRACK=$AUDIOTRACK:$(mkvinfo "$MKV" | tr '\n' '|' | sed 's/|| +/\n/g' | sed 's/||+/\n/g' | grep "A track" | grep audio | head -n$TRACKNUM | tail -n1 | sed 's/||/\n/g' | grep "Track number" | cut -f3 -d':' | cut -d' ' -f2 | cut -d')' -f1)
 			TRACKNUM=$(($TRACKNUM+1))
 		done
 	else
